@@ -1,0 +1,132 @@
+version: '3.8'
+services:
+  ## POSTGRESQL Docker Compose Config
+  postgres:
+    container_name: postgres
+    image: postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - PGDATA: /data/postgres
+    volumes:
+      - postgres:data/postgres
+    ports:
+      - 5432:5432
+    networks:
+      - postgres
+  
+  config-server-ms:
+    container_name: config-server-ms
+    image: sneigee/config-server-ms:latest
+    ports:
+      - 8090:8090
+    depend_on:
+      - servicereg
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker    
+    networks:
+      - microservices-network
+      - postgres
+
+  servicereg:
+    container_name: servicereg
+    image: sneigee/servicereg:latest
+    ports:
+      - 8761:8761
+    depend_on:
+      - rabbitmq
+      - zipkin
+      - postgres
+    networks:
+      - microservices-network
+      - postgres
+  
+  companyms:
+    container_name: company
+    image: sneigee/companyms:latest
+    ports:
+      - 8091:8091
+    depend_on:
+      - servicereg
+      - config-server-ms
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    networks:
+      - microservices-network
+      - postgres
+
+  jobms:
+    container_name: job
+    image: sneigee/jobms:latest
+    ports:
+      - 8092:8092
+    depend_on:
+      - servicereg
+      - config-server-ms
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker    
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://servicereg:8761/eureka
+    networks:
+      - microservices-network
+      - postgres
+
+  reviewms:
+    container_name: review
+    image: sneigee/reviewms:latest
+    ports:
+      - 8093:8093
+    depend_on:
+      - servicereg
+      - config-server-ms
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    networks:
+      - microservices-network
+      - postgres
+  
+  gateway-ms:
+    container_name: gateway-ms
+    image: sneigee/gateway-ms:latest
+    ports:
+      - 8094:8094
+    depend_on:
+      - servicereg
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker    
+    networks:
+      - microservices-network
+      - postgres
+  
+  ## ZIPKIN POSTGRESQL Docker Compose Config
+  zipkin:
+    image: openzipkin/zipkin
+    container_name: zipkin
+    ports:
+      - 9411:9411
+    networks:
+      - microservices-network
+      - postgres
+  
+  # RabbitMQ
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    restart: on-failure
+    ports:
+      - 5672:5672
+      - 15672:15672
+      # volumes:
+      #   - rabbitmq:/var/lib/rabbitmq
+    networks:
+      - microservices-network
+      - postgres
+
+networks:
+  microservices-network:
+    driver: bridge
+  postgres:
+    driver: bridge
+
+volumes:
+  postgres:
